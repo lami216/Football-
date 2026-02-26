@@ -26,19 +26,21 @@ const scheduleLogoA = document.getElementById('scheduleLogoA');
 const scheduleLogoB = document.getElementById('scheduleLogoB');
 const scheduleMeta = document.getElementById('scheduleMeta');
 const goalOverlay = document.getElementById('goalOverlay');
+const countdownOverlay = document.getElementById('countdownOverlay');
 const fullTimeOverlay = document.getElementById('fullTimeOverlay');
+const startMatchBtn = document.getElementById('startMatchBtn');
+const resetMatchBtn = document.getElementById('resetMatchBtn');
 
 const worldSize = 1000;
 const center = { x: worldSize / 2, y: worldSize / 2 };
 const arenaR = 420;
-const ballR = 28;
-const segments = 120;
+const ballR = 34;
+const segments = 140;
 const goalAngle = 0;
 const goalHalfWidth = 0.22;
 
 const engine = Engine.create({ gravity: { x: 0, y: 0 } });
 const runner = Runner.create();
-engine.timing.timeScale = 1;
 
 const physics = {
   walls: [],
@@ -47,8 +49,16 @@ const physics = {
   running: false,
   fullTime: false,
   goalLock: false,
-  lastImpulse: 0,
-  activeResetNonce: null
+  pausedUntil: 0,
+  nextImpulseAt: 0,
+  activeResetNonce: null,
+  runnerStarted: false
+};
+
+const logoCache = { A: null, B: null };
+const audio = {
+  ctx: null,
+  unlocked: false
 };
 
 let settings = loadSettings();
@@ -71,6 +81,85 @@ function loadMatchState() {
   }
 }
 function saveMatchState() { localStorage.setItem(STATE_KEY, JSON.stringify(matchState)); }
+
+function ensureAudio() {
+  if (!audio.ctx) audio.ctx = new (window.AudioContext || window.webkitAudioContext)();
+  if (!audio.unlocked) {
+    const src = audio.ctx.createBufferSource();
+    const gain = audio.ctx.createGain();
+    gain.gain.value = 0;
+    src.connect(gain).connect(audio.ctx.destination);
+    src.start();
+    audio.unlocked = true;
+  }
+  if (audio.ctx.state === 'suspended') audio.ctx.resume();
+  return audio.ctx;
+}
+
+function whistle(type) {
+  const audioCtx = ensureAudio();
+  const now = audioCtx.currentTime;
+  const duration = type === 'final' ? 0.62 : 0.32;
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  const lfo = audioCtx.createOscillator();
+  const lfoGain = audioCtx.createGain();
+
+  osc.type = 'square';
+  osc.frequency.setValueAtTime(type === 'final' ? 1680 : 1880, now);
+  osc.frequency.exponentialRampToValueAtTime(type === 'final' ? 1460 : 1620, now + duration);
+
+  lfo.type = 'sine';
+  lfo.frequency.value = type === 'final' ? 16 : 22;
+  lfoGain.gain.value = type === 'final' ? 75 : 60;
+
+  gain.gain.setValueAtTime(0.0001, now);
+  gain.gain.exponentialRampToValueAtTime(0.2, now + 0.02);
+  gain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+
+  lfo.connect(lfoGain);
+  lfoGain.connect(osc.frequency);
+  osc.connect(gain).connect(audioCtx.destination);
+
+  osc.start(now);
+  lfo.start(now);
+  osc.stop(now + duration + 0.03);
+  lfo.stop(now + duration + 0.03);
+}
+
+function playCollisionTick(intensity = 1) {
+  const audioCtx = ensureAudio();
+  const now = audioCtx.currentTime;
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  osc.type = 'triangle';
+  osc.frequency.value = 420 + Math.random() * 180;
+  const vol = Math.min(0.09, 0.035 + intensity * 0.025);
+  gain.gain.setValueAtTime(0.0001, now);
+  gain.gain.exponentialRampToValueAtTime(vol, now + 0.004);
+  gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.065);
+  osc.connect(gain).connect(audioCtx.destination);
+  osc.start(now);
+  osc.stop(now + 0.07);
+}
+
+function playGoalCheer() {
+  const audioCtx = ensureAudio();
+  const now = audioCtx.currentTime;
+  [260, 320, 390, 470].forEach((freq, i) => {
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = i % 2 ? 'sawtooth' : 'triangle';
+    osc.frequency.value = freq;
+    gain.gain.setValueAtTime(0.0001, now + i * 0.06);
+    gain.gain.exponentialRampToValueAtTime(0.08, now + i * 0.06 + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + i * 0.06 + 0.2);
+    osc.connect(gain).connect(audioCtx.destination);
+    osc.start(now + i * 0.06);
+    osc.stop(now + i * 0.06 + 0.22);
+  });
+}
+
 function setTheme(theme) {
   document.body.classList.remove('theme-champions', 'theme-laliga', 'theme-premier');
   document.body.classList.add(`theme-${theme}`);
@@ -80,8 +169,24 @@ function friendlyDate(dateStr) {
   const d = new Date(`${dateStr}T00:00:00`);
   return d.toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric' });
 }
+
+function updateControlButtons() {
+  const showStart = matchState.status === 'ready';
+  const showReset = matchState.status === 'finished';
+  startMatchBtn.classList.toggle('hidden', !showStart);
+  resetMatchBtn.classList.toggle('hidden', !showReset);
+}
+
+function setupLogoCache() {
+  logoCache.A = settings.teamA.logo ? new Image() : null;
+  logoCache.B = settings.teamB.logo ? new Image() : null;
+  if (logoCache.A) logoCache.A.src = settings.teamA.logo;
+  if (logoCache.B) logoCache.B.src = settings.teamB.logo;
+}
+
 function renderData() {
   setTheme(settings.theme);
+  setupLogoCache();
   nameA.textContent = settings.teamA.name;
   nameB.textContent = settings.teamB.name;
   logoA.src = settings.teamA.logo || '';
@@ -93,12 +198,13 @@ function renderData() {
   scheduleMeta.innerHTML = `${friendlyDate(settings.schedule.date)}<br>${settings.schedule.time || 'Time TBD'}`;
   scoreAEl.textContent = String(settings.score?.a || 0);
   scoreBEl.textContent = String(settings.score?.b || 0);
+  updateControlButtons();
 }
 
 function buildArenaBoundary() {
   if (physics.walls.length) Composite.remove(engine.world, physics.walls);
   physics.walls = [];
-  const thickness = 14;
+  const thickness = 22;
   const segLen = (2 * Math.PI * arenaR) / segments;
   for (let i = 0; i < segments; i += 1) {
     const theta = (i / segments) * Math.PI * 2;
@@ -106,43 +212,70 @@ function buildArenaBoundary() {
     if (delta <= goalHalfWidth) continue;
     const x = center.x + Math.cos(theta) * arenaR;
     const y = center.y + Math.sin(theta) * arenaR;
-    physics.walls.push(Bodies.rectangle(x, y, segLen + 4, thickness, {
+    physics.walls.push(Bodies.rectangle(x, y, segLen + 6, thickness, {
       isStatic: true,
       angle: theta + Math.PI / 2,
+      restitution: 1,
       render: { visible: false }
     }));
   }
   Composite.add(engine.world, physics.walls);
 }
+
+function createBall(x, label) {
+  return Bodies.circle(x, center.y, ballR, {
+    restitution: 0.9,
+    frictionAir: 0.011,
+    friction: 0.001,
+    frictionStatic: 0,
+    slop: 0.02,
+    label
+  });
+}
+
 function spawnBalls() {
   if (physics.teamA) Composite.remove(engine.world, [physics.teamA, physics.teamB]);
-  physics.teamA = Bodies.circle(center.x - 52, center.y, ballR, {
-    restitution: 0.92, frictionAir: 0.0028, friction: 0.003, label: 'A'
-  });
-  physics.teamB = Bodies.circle(center.x + 52, center.y, ballR, {
-    restitution: 0.92, frictionAir: 0.0028, friction: 0.003, label: 'B'
-  });
+  physics.teamA = createBall(center.x - 56, 'A');
+  physics.teamB = createBall(center.x + 56, 'B');
   Composite.add(engine.world, [physics.teamA, physics.teamB]);
-  kickOff();
+  placeBallsAtCenter();
 }
-function kickOff() {
-  [physics.teamA, physics.teamB].forEach((ball) => {
-    const a = Math.random() * Math.PI * 2;
-    const speed = 8 + Math.random() * 5;
-    Body.setPosition(ball, { x: ball === physics.teamA ? center.x - 50 : center.x + 50, y: center.y + (Math.random() * 20 - 10) });
-    Body.setVelocity(ball, { x: Math.cos(a) * speed, y: Math.sin(a) * speed });
+
+function placeBallsAtCenter() {
+  [physics.teamA, physics.teamB].forEach((ball, index) => {
+    const dir = index === 0 ? -1 : 1;
+    Body.setPosition(ball, {
+      x: center.x + dir * 60,
+      y: center.y + (Math.random() * 24 - 12)
+    });
+    Body.setVelocity(ball, { x: 0, y: 0 });
     Body.setAngularVelocity(ball, 0);
   });
 }
+
+function kickOff() {
+  [physics.teamA, physics.teamB].forEach((ball) => {
+    const a = Math.random() * Math.PI * 2;
+    const speed = 5 + Math.random() * 2;
+    Body.setVelocity(ball, { x: Math.cos(a) * speed, y: Math.sin(a) * speed });
+  });
+}
+
 function keepInsideHard(ball) {
   const fromCenter = Vector.sub(ball.position, center);
   const dist = Vector.magnitude(fromCenter);
-  if (dist > arenaR + ballR + 16) {
+  const maxDist = arenaR - ballR - 4;
+  if (dist > maxDist) {
     const n = Vector.normalise(fromCenter);
-    Body.setPosition(ball, Vector.add(center, Vector.mult(n, arenaR - ballR - 12)));
-    Body.setVelocity(ball, Vector.mult(n, -8));
+    Body.setPosition(ball, Vector.add(center, Vector.mult(n, maxDist)));
+    const towardsCenter = Vector.mult(n, -1.15);
+    Body.setVelocity(ball, {
+      x: ball.velocity.x * 0.75 + towardsCenter.x,
+      y: ball.velocity.y * 0.75 + towardsCenter.y
+    });
   }
 }
+
 function inGoalMouth(ball) {
   const p = Vector.sub(ball.position, center);
   const dist = Vector.magnitude(p);
@@ -150,23 +283,7 @@ function inGoalMouth(ball) {
   const angDist = Math.abs(Math.atan2(Math.sin(theta - goalAngle), Math.cos(theta - goalAngle)));
   return angDist <= goalHalfWidth && dist >= arenaR - ballR * 0.7;
 }
-function playGoalSound() {
-  const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-  const now = audioCtx.currentTime;
-  const notes = [180, 240, 320, 260];
-  notes.forEach((freq, i) => {
-    const osc = audioCtx.createOscillator();
-    const gain = audioCtx.createGain();
-    osc.type = i % 2 ? 'triangle' : 'square';
-    osc.frequency.value = freq;
-    gain.gain.setValueAtTime(0.0001, now + i * 0.08);
-    gain.gain.exponentialRampToValueAtTime(0.17, now + i * 0.08 + 0.01);
-    gain.gain.exponentialRampToValueAtTime(0.0001, now + i * 0.08 + 0.15);
-    osc.connect(gain).connect(audioCtx.destination);
-    osc.start(now + i * 0.08);
-    osc.stop(now + i * 0.08 + 0.16);
-  });
-}
+
 function onGoal(scoringTeam) {
   if (physics.goalLock || physics.fullTime || !physics.running) return;
   physics.goalLock = true;
@@ -176,13 +293,17 @@ function onGoal(scoringTeam) {
   scoreAEl.textContent = settings.score.a;
   scoreBEl.textContent = settings.score.b;
   goalOverlay.classList.add('show');
-  playGoalSound();
-  setTimeout(() => goalOverlay.classList.remove('show'), 1000);
+  playGoalCheer();
+
+  physics.pausedUntil = performance.now() + 800;
   setTimeout(() => {
+    goalOverlay.classList.remove('show');
+    placeBallsAtCenter();
     kickOff();
     physics.goalLock = false;
   }, 800);
 }
+
 function updateClock() {
   if (!matchState.startedAt) {
     clockEl.textContent = '00:00';
@@ -194,32 +315,98 @@ function updateClock() {
   const mm = String(Math.floor(broadcastSeconds / 60)).padStart(2, '0');
   const ss = String(broadcastSeconds % 60).padStart(2, '0');
   clockEl.textContent = `${mm}:${ss}`;
+
   if (elapsedSec >= settings.durationSec && !physics.fullTime) finishMatch();
 }
+
+function showCountdownAndStart() {
+  let count = 3;
+  countdownOverlay.textContent = String(count);
+  countdownOverlay.classList.add('show');
+
+  const step = () => {
+    count -= 1;
+    if (count > 0) {
+      countdownOverlay.textContent = String(count);
+      setTimeout(step, 1000);
+      return;
+    }
+    countdownOverlay.classList.remove('show');
+    matchState.status = 'running';
+    matchState.startedAt = Date.now();
+    saveMatchState();
+    physics.running = true;
+    whistle('start');
+    kickOff();
+  };
+
+  setTimeout(step, 1000);
+}
+
 function finishMatch() {
   physics.fullTime = true;
   physics.running = false;
-  Runner.stop(runner);
   fullTimeOverlay.classList.add('show');
+  whistle('final');
   matchState.status = 'finished';
   saveMatchState();
+  updateControlButtons();
 }
+
+function resetMatch() {
+  settings.score = { a: 0, b: 0 };
+  saveSettings();
+  scoreAEl.textContent = '0';
+  scoreBEl.textContent = '0';
+
+  fullTimeOverlay.classList.remove('show');
+  countdownOverlay.classList.remove('show');
+  goalOverlay.classList.remove('show');
+
+  matchState = {
+    status: 'ready',
+    startedAt: null,
+    resetNonce: Date.now()
+  };
+  saveMatchState();
+
+  physics.fullTime = false;
+  physics.running = false;
+  physics.goalLock = false;
+  physics.pausedUntil = 0;
+  placeBallsAtCenter();
+  clockEl.textContent = '00:00';
+  updateControlButtons();
+}
+
 function maybeRun() {
   settings = loadSettings();
   matchState = loadMatchState();
+
   if (physics.activeResetNonce !== matchState.resetNonce) {
     settings.score = settings.score || { a: 0, b: 0 };
     renderData();
     spawnBalls();
     physics.fullTime = false;
+    physics.goalLock = false;
+    physics.running = false;
     fullTimeOverlay.classList.remove('show');
+    countdownOverlay.classList.remove('show');
     physics.activeResetNonce = matchState.resetNonce;
+  } else {
+    renderData();
   }
+
   if (matchState.status === 'running' && !physics.fullTime) {
     physics.running = true;
-    Runner.run(runner, engine);
+  }
+  if (matchState.status === 'finished') {
+    physics.fullTime = true;
+    physics.running = false;
+    fullTimeOverlay.classList.add('show');
   }
 }
+
 function drawNet() {
   ctx.save();
   ctx.translate(center.x, center.y);
@@ -253,6 +440,33 @@ function drawNet() {
   }
   ctx.restore();
 }
+
+function drawBall(ball, color, logoImg) {
+  ctx.save();
+  ctx.translate(ball.position.x, ball.position.y);
+  ctx.rotate(ball.angle);
+
+  ctx.beginPath();
+  ctx.fillStyle = color;
+  ctx.arc(0, 0, ballR, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.lineWidth = 3;
+  ctx.strokeStyle = '#ffffff';
+  ctx.stroke();
+
+  if (logoImg && logoImg.complete && logoImg.naturalWidth > 0) {
+    const logoSize = ballR * 1.28;
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(0, 0, ballR - 4, 0, Math.PI * 2);
+    ctx.clip();
+    ctx.drawImage(logoImg, -logoSize / 2, -logoSize / 2, logoSize, logoSize);
+    ctx.restore();
+  }
+
+  ctx.restore();
+}
+
 function drawScene() {
   ctx.clearRect(0, 0, worldSize, worldSize);
   ctx.save();
@@ -262,32 +476,47 @@ function drawScene() {
   ctx.arc(center.x, center.y, arenaR, goalHalfWidth, Math.PI * 2 - goalHalfWidth);
   ctx.stroke();
   drawNet();
-  const drawBall = (ball, color) => {
-    ctx.beginPath();
-    ctx.fillStyle = color;
-    ctx.arc(ball.position.x, ball.position.y, ballR, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.lineWidth = 3;
-    ctx.strokeStyle = '#ffffff';
-    ctx.stroke();
-  };
-  drawBall(physics.teamA, '#39e0ff');
-  drawBall(physics.teamB, '#ff7e5e');
+
+  drawBall(physics.teamA, '#39e0ff', logoCache.A);
+  drawBall(physics.teamB, '#ff7e5e', logoCache.B);
   ctx.restore();
 }
 
+Events.on(engine, 'collisionStart', (event) => {
+  event.pairs.forEach((pair) => {
+    const labels = [pair.bodyA.label, pair.bodyB.label];
+    if (labels.includes('A') && labels.includes('B')) {
+      const speed = pair.collision?.depth ? Math.min(1.6, pair.collision.depth * 0.2) : 1;
+      playCollisionTick(speed);
+    }
+  });
+});
+
 Events.on(engine, 'beforeUpdate', () => {
+  if (!physics.teamA || !physics.teamB) return;
+  if (!physics.running || physics.fullTime || performance.now() < physics.pausedUntil) {
+    Body.setVelocity(physics.teamA, { x: 0, y: 0 });
+    Body.setVelocity(physics.teamB, { x: 0, y: 0 });
+    return;
+  }
+
   keepInsideHard(physics.teamA);
   keepInsideHard(physics.teamB);
-  const now = Date.now();
-  if (now - physics.lastImpulse > 420) {
-    physics.lastImpulse = now;
+
+  const now = performance.now();
+  if (!physics.nextImpulseAt) physics.nextImpulseAt = now + 2200;
+  if (now >= physics.nextImpulseAt) {
+    physics.nextImpulseAt = now + 2000 + Math.random() * 1000;
     [physics.teamA, physics.teamB].forEach((ball) => {
-      const force = 0.018 + Math.random() * 0.02;
+      const force = 0.0022 + Math.random() * 0.0016;
       const ang = Math.random() * Math.PI * 2;
-      Body.applyForce(ball, ball.position, { x: Math.cos(ang) * force, y: Math.sin(ang) * force });
+      Body.applyForce(ball, ball.position, {
+        x: Math.cos(ang) * force,
+        y: Math.sin(ang) * force
+      });
     });
   }
+
   if (inGoalMouth(physics.teamA)) onGoal('B');
   if (inGoalMouth(physics.teamB)) onGoal('A');
 });
@@ -299,9 +528,29 @@ function loop() {
   requestAnimationFrame(loop);
 }
 
+startMatchBtn.addEventListener('click', () => {
+  ensureAudio();
+  startMatchBtn.classList.add('hidden');
+  resetMatchBtn.classList.add('hidden');
+  fullTimeOverlay.classList.remove('show');
+  physics.fullTime = false;
+  physics.running = false;
+  placeBallsAtCenter();
+  showCountdownAndStart();
+});
+
+resetMatchBtn.addEventListener('click', () => {
+  ensureAudio();
+  resetMatch();
+});
+
 buildArenaBoundary();
 spawnBalls();
 renderData();
+if (!physics.runnerStarted) {
+  Runner.run(runner, engine);
+  physics.runnerStarted = true;
+}
 maybeRun();
 loop();
 window.addEventListener('storage', maybeRun);
