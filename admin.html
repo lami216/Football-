@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Admin Control Panel</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body class="admin-page theme-champions">
+  <main class="admin-wrap">
+    <section class="glass">
+      <h1>Match Admin / Control Panel</h1>
+      <p>Configure teams, visuals, schedule and match controls. This page is separate from match broadcast view.</p>
+    </section>
+    <section class="glass admin-grid">
+      <div class="field">
+        <label for="teamAName">Team A Name</label>
+        <input id="teamAName" type="text" maxlength="26" placeholder="Team A" />
+      </div>
+      <div class="field">
+        <label for="teamBName">Team B Name</label>
+        <input id="teamBName" type="text" maxlength="26" placeholder="Team B" />
+      </div>
+      <div class="field">
+        <label for="teamALogo">Team A Logo Upload</label>
+        <input id="teamALogo" type="file" accept="image/*" />
+        <div class="file-hint">Stored as base64 in localStorage (no repo assets).</div>
+      </div>
+      <div class="field">
+        <label for="teamBLogo">Team B Logo Upload</label>
+        <input id="teamBLogo" type="file" accept="image/*" />
+      </div>
+      <div class="field">
+        <label for="duration">Real Match Duration (15-60s)</label>
+        <input id="duration" type="range" min="15" max="60" value="30" />
+        <div id="durationLabel" class="file-hint"></div>
+      </div>
+      <div class="field">
+        <label for="theme">Theme</label>
+        <select id="theme">
+          <option value="champions">Champions</option>
+          <option value="laliga">LaLiga</option>
+          <option value="premier">Premier</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="matchDate">Match Date</label>
+        <input id="matchDate" type="date" />
+      </div>
+      <div class="field">
+        <label for="matchTime">Match Time Text</label>
+        <input id="matchTime" type="text" placeholder="20:45 CET" />
+      </div>
+    </section>
+    <section class="glass">
+      <h2>Schedule Preview</h2>
+      <div id="schedulePreview" class="schedule-preview"></div>
+    </section>
+    <section class="glass admin-actions">
+      <button class="btn" id="saveBtn" type="button">Save Settings</button>
+      <button class="btn" id="startBtn" type="button">Start Match</button>
+      <button class="btn btn-ghost" id="resetBtn" type="button">Reset Match</button>
+      <button class="btn btn-ghost" id="openMatchBtn" type="button">Open Match View</button>
+    </section>
+  </main>
+  <script src="app-admin.js"></script>
+</body>
+</html>
