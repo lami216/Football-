@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Match Broadcast View</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body class="match-page theme-champions">
+  <main class="broadcast">
+    <section class="scorebar glass">
+      <article class="team-panel">
+        <img id="logoA" class="preview-logo" alt="Team A logo" />
+        <span id="nameA">Team A</span>
+      </article>
+      <article class="center-score">
+        <div class="score"><span id="scoreA">0</span> - <span id="scoreB">0</span></div>
+        <div id="clock" class="clock">00:00</div>
+      </article>
+      <article class="team-panel right">
+        <span id="nameB">Team B</span>
+        <img id="logoB" class="preview-logo" alt="Team B logo" />
+      </article>
+    </section>
+
+    <section class="arena-frame">
+      <div class="arena">
+        <canvas id="arenaCanvas" width="1000" height="1000" aria-label="Football physics arena"></canvas>
+      </div>
+    </section>
+
+    <section class="schedule-card glass">
+      <h3 class="schedule-title">Match Schedule</h3>
+      <div class="schedule-row">
+        <div class="team-chip">
+          <img id="scheduleLogoA" class="preview-logo" alt="Team A schedule logo" />
+          <strong id="scheduleNameA">Team A</strong>
+        </div>
+        <div id="scheduleMeta" class="schedule-meta">Date • Time</div>
+        <div class="team-chip" style="justify-content:flex-end;">
+          <strong id="scheduleNameB">Team B</strong>
+          <img id="scheduleLogoB" class="preview-logo" alt="Team B schedule logo" />
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <div id="goalOverlay" class="overlay">GOAL!</div>
+  <div id="fullTimeOverlay" class="overlay">FULL TIME</div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.20.0/matter.min.js" referrerpolicy="no-referrer"></script>
+  <script src="app-match.js"></script>
+</body>
+</html>
