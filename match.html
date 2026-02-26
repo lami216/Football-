@@ -23,6 +23,11 @@
       </article>
     </section>
 
+    <section class="match-controls" aria-label="Match controls">
+      <button id="startMatchBtn" class="match-btn" type="button">Start Match</button>
+      <button id="resetMatchBtn" class="match-btn" type="button">Reset Match</button>
+    </section>
+
     <section class="arena-frame">
       <div class="arena">
         <canvas id="arenaCanvas" width="1000" height="1000" aria-label="Football physics arena"></canvas>
@@ -46,6 +51,7 @@
   </main>
 
   <div id="goalOverlay" class="overlay">GOAL!</div>
+  <div id="countdownOverlay" class="overlay">3</div>
   <div id="fullTimeOverlay" class="overlay">FULL TIME</div>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.20.0/matter.min.js" referrerpolicy="no-referrer"></script>
