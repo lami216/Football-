@@ -34,20 +34,21 @@ const resetMatchBtn = document.getElementById('resetMatchBtn');
 const worldSize = 1000;
 const center = { x: worldSize / 2, y: worldSize / 2 };
 const arenaR = 420;
-const ballR = 34;
+const speedMultiplier = 1.5;
+const scoreboardLogoDiameterFallback = 34;
+let ballR = (scoreboardLogoDiameterFallback * 0.5) / 2;
 const segments = 140;
-const goalHalfWidth = 0.22;
+const gapSize = 0.44;
 const goalRotationSpeed = 0.00033;
 const impulseIntervalMin = 1000;
 const impulseIntervalMax = 1500;
-const impulseForceMin = 0.0016;
-const impulseForceMax = 0.0028;
+const impulseForceMin = 0.0016 * speedMultiplier;
+const impulseForceMax = 0.0028 * speedMultiplier;
 const lowSpeedThreshold = 3.1;
 const minSpeed = 3.7;
-const maxSpeed = 13.8;
-const wallBoostMin = 1 + (1.05 - 1) * 1.5;
-const wallBoostMax = 1 + (1.15 - 1) * 1.5;
-const overlapCheckRadius = ballR * 2.03;
+const maxSpeed = 13.8 * speedMultiplier;
+const wallBoostMin = (1 + (1.05 - 1) * 1.5) * speedMultiplier;
+const wallBoostMax = (1 + (1.15 - 1) * 1.5) * speedMultiplier;
 
 const engine = Engine.create();
 engine.world.gravity.y = 0;
@@ -221,7 +222,7 @@ function buildArenaBoundary() {
   for (let i = 0; i < segments; i += 1) {
     const theta = (i / segments) * Math.PI * 2;
     const delta = Math.abs(Math.atan2(Math.sin(theta - physics.goalAngle), Math.cos(theta - physics.goalAngle)));
-    if (delta <= goalHalfWidth) continue;
+    if (delta <= gapSize / 2) continue;
     const x = center.x + Math.cos(theta) * arenaR;
     const y = center.y + Math.sin(theta) * arenaR;
     physics.walls.push(Bodies.rectangle(x, y, segLen + 6, thickness, {
@@ -237,9 +238,9 @@ function buildArenaBoundary() {
 
 function createBall(x, label) {
   return Bodies.circle(x, center.y, ballR, {
-    restitution: 0.9,
-    frictionAir: 0.011,
-    friction: 0.001,
+    restitution: 0.95,
+    frictionAir: 0.01,
+    friction: 0,
     frictionStatic: 0,
     slop: 0.02,
     label
@@ -305,13 +306,20 @@ function kickOff() {
     const a = baseAngle + direction * (Math.PI * 0.1 + Math.random() * Math.PI * 0.1);
     const speed = minSpeed + Math.random() * 0.8;
     Body.setVelocity(ball, { x: Math.cos(a) * speed, y: Math.sin(a) * speed });
-    randomImpulse(ball, 1.8);
+    randomImpulse(ball, 1.8 * speedMultiplier);
   });
 }
 
 function keepInsideHard(ball) {
   const fromCenter = Vector.sub(ball.position, center);
   const dist = Vector.magnitude(fromCenter);
+  const theta = Math.atan2(fromCenter.y, fromCenter.x);
+  const angularDistance = Math.abs(Math.atan2(Math.sin(theta - physics.goalAngle), Math.cos(theta - physics.goalAngle)));
+  if (angularDistance <= gapSize / 2) {
+    clampBallSpeed(ball);
+    return;
+  }
+
   const maxDist = arenaR - ballR - 4;
   if (dist > maxDist) {
     const n = Vector.normalise(fromCenter);
@@ -332,7 +340,7 @@ function inGoalMouth(ball) {
   const dist = Vector.magnitude(p);
   const theta = Math.atan2(p.y, p.x);
   const angDist = Math.abs(Math.atan2(Math.sin(theta - physics.goalAngle), Math.cos(theta - physics.goalAngle)));
-  return angDist <= goalHalfWidth && dist >= arenaR - ballR * 0.7;
+  return angDist <= gapSize / 2 && dist >= arenaR - ballR * 0.7;
 }
 
 function onGoal(scoringTeam) {
@@ -437,6 +445,7 @@ function maybeRun() {
   if (physics.activeResetNonce !== matchState.resetNonce) {
     settings.score = settings.score || { a: 0, b: 0 };
     renderData();
+    syncBallSizeToScoreboardLogo();
     spawnBalls();
     physics.fullTime = false;
     physics.goalLock = false;
@@ -460,6 +469,7 @@ function maybeRun() {
 }
 
 function separateOverlappingBalls() {
+  const overlapCheckRadius = ballR * 2.03;
   const delta = Vector.sub(physics.teamB.position, physics.teamA.position);
   const dist = Vector.magnitude(delta);
   if (dist > overlapCheckRadius || dist === 0) return;
@@ -488,7 +498,7 @@ function drawNet() {
   const yFront = Math.sin(physics.goalAngle) * arenaR;
   const xBack = Math.cos(physics.goalAngle) * (arenaR + mouthDepth);
   const yBack = Math.sin(physics.goalAngle) * (arenaR + mouthDepth);
-  const width = goalHalfWidth * arenaR;
+  const width = (gapSize / 2) * arenaR;
   ctx.strokeStyle = 'rgba(230,247,255,0.65)';
   ctx.lineWidth = 2;
   for (let i = -4; i <= 4; i += 1) {
@@ -528,12 +538,26 @@ function drawBall(ball, color, logoImg) {
   ctx.stroke();
 
   if (logoImg && logoImg.complete && logoImg.naturalWidth > 0) {
-    const logoSize = ballR * 1.28;
+    const clipRadius = ballR - 4;
+    const imageDiameter = clipRadius * 2;
+    const minSide = Math.min(logoImg.naturalWidth, logoImg.naturalHeight);
+    const sourceX = (logoImg.naturalWidth - minSide) / 2;
+    const sourceY = (logoImg.naturalHeight - minSide) / 2;
     ctx.save();
     ctx.beginPath();
-    ctx.arc(0, 0, ballR - 4, 0, Math.PI * 2);
+    ctx.arc(0, 0, clipRadius, 0, Math.PI * 2);
     ctx.clip();
-    ctx.drawImage(logoImg, -logoSize / 2, -logoSize / 2, logoSize, logoSize);
+    ctx.drawImage(
+      logoImg,
+      sourceX,
+      sourceY,
+      minSide,
+      minSide,
+      -imageDiameter / 2,
+      -imageDiameter / 2,
+      imageDiameter,
+      imageDiameter
+    );
     ctx.restore();
   }
 
@@ -546,7 +570,7 @@ function drawScene() {
   ctx.strokeStyle = 'rgba(246, 253, 255, 0.96)';
   ctx.lineWidth = 6;
   ctx.beginPath();
-  ctx.arc(center.x, center.y, arenaR, physics.goalAngle + goalHalfWidth, physics.goalAngle + Math.PI * 2 - goalHalfWidth);
+  ctx.arc(center.x, center.y, arenaR, physics.goalAngle + gapSize / 2, physics.goalAngle + Math.PI * 2 - gapSize / 2);
   ctx.stroke();
   drawNet();
 
@@ -561,20 +585,54 @@ Events.on(engine, 'collisionStart', (event) => {
     if (labels.includes('A') && labels.includes('B')) {
       const speed = pair.collision?.depth ? Math.min(1.6, pair.collision.depth * 0.2) : 1;
       playCollisionTick(speed);
+
+      const bodyA = pair.bodyA.label === 'A' ? pair.bodyA : pair.bodyB;
+      const bodyB = pair.bodyA.label === 'B' ? pair.bodyA : pair.bodyB;
+      const collisionNormal = Vector.normalise(Vector.sub(bodyB.position, bodyA.position));
+      const relativeVelocity = Vector.sub(bodyA.velocity, bodyB.velocity);
+      const velAlongNormal = Vector.dot(relativeVelocity, collisionNormal);
+      if (velAlongNormal < 0) {
+        const restitution = 0.95;
+        const impulseMag = (-(1 + restitution) * velAlongNormal) / 2;
+        const impulse = Vector.mult(collisionNormal, impulseMag);
+        Body.setVelocity(bodyA, Vector.add(bodyA.velocity, impulse));
+        Body.setVelocity(bodyB, Vector.sub(bodyB.velocity, impulse));
+        clampBallSpeed(bodyA);
+        clampBallSpeed(bodyB);
+      }
     }
 
     const ball = pair.bodyA.label === 'A' || pair.bodyA.label === 'B' ? pair.bodyA : (pair.bodyB.label === 'A' || pair.bodyB.label === 'B' ? pair.bodyB : null);
     const hitWall = pair.bodyA.label === 'wall' || pair.bodyB.label === 'wall';
     if (ball && hitWall) {
-      const boost = wallBoostMin + Math.random() * (wallBoostMax - wallBoostMin);
-      Body.setVelocity(ball, {
-        x: ball.velocity.x * boost,
-        y: ball.velocity.y * boost
-      });
-      clampBallSpeed(ball);
+      const normal = Vector.normalise(Vector.sub(ball.position, center));
+      const incoming = ball.velocity;
+      const dot = Vector.dot(incoming, normal);
+      if (dot > 0) {
+        const reflected = Vector.sub(incoming, Vector.mult(normal, 2 * dot));
+        const oppositeDot = Vector.dot(reflected, incoming);
+        const correctedReflected = oppositeDot < 0 ? reflected : Vector.mult(reflected, -1);
+        const boost = wallBoostMin + Math.random() * (wallBoostMax - wallBoostMin);
+        Body.setVelocity(ball, {
+          x: correctedReflected.x * boost,
+          y: correctedReflected.y * boost
+        });
+        clampBallSpeed(ball);
+      }
     }
   });
 });
+
+function syncBallSizeToScoreboardLogo() {
+  const style = getComputedStyle(logoA);
+  const scoreboardLogoDiameter = parseFloat(style.width) || scoreboardLogoDiameterFallback;
+  ballR = (scoreboardLogoDiameter * 0.5) / 2;
+}
+
+function refreshBallSizing() {
+  syncBallSizeToScoreboardLogo();
+  spawnBalls();
+}
 
 Events.on(engine, 'beforeUpdate', () => {
   if (!physics.teamA || !physics.teamB) return;
@@ -636,8 +694,8 @@ resetMatchBtn.addEventListener('click', () => {
 });
 
 buildArenaBoundary();
-spawnBalls();
 renderData();
+refreshBallSizing();
 if (!physics.runnerStarted) {
   Runner.run(runner, engine);
   physics.runnerStarted = true;
@@ -645,3 +703,4 @@ if (!physics.runnerStarted) {
 maybeRun();
 loop();
 window.addEventListener('storage', maybeRun);
+window.addEventListener('resize', refreshBallSizing);
