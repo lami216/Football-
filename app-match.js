@@ -271,6 +271,13 @@ function enforceBallSpeed(ball) {
   Body.setVelocity(ball, Vector.mult(direction, baseSpeed));
 }
 
+function redirectBallToCenter(ball) {
+  const directionToCenter = normaliseOrFallback(Vector.sub(center, ball.position));
+  ball.plugin = ball.plugin || {};
+  ball.plugin.lastDirection = directionToCenter;
+  Body.setVelocity(ball, Vector.mult(directionToCenter, baseSpeed));
+}
+
 function reflectVelocity(velocity, normal) {
   const n = normaliseOrFallback(normal);
   return Vector.sub(velocity, Vector.mult(n, 2 * Vector.dot(velocity, n)));
@@ -300,7 +307,7 @@ function keepInsideHard(ball) {
   if (dist > maxDist) {
     const n = normaliseOrFallback(fromCenter);
     Body.setPosition(ball, Vector.add(center, Vector.mult(n, maxDist)));
-    Body.setVelocity(ball, reflectVelocity(ball.velocity, n));
+    redirectBallToCenter(ball);
   }
   enforceBallSpeed(ball);
 }
@@ -564,10 +571,7 @@ Events.on(engine, 'collisionStart', (event) => {
     const ball = pair.bodyA.label === 'A' || pair.bodyA.label === 'B' ? pair.bodyA : (pair.bodyB.label === 'A' || pair.bodyB.label === 'B' ? pair.bodyB : null);
     const hitWall = pair.bodyA.label === 'wall' || pair.bodyB.label === 'wall';
     if (ball && hitWall) {
-      const collisionNormal = pair.collision?.normal || normaliseOrFallback(Vector.sub(ball.position, center));
-      const wallToBallNormal = ball === pair.bodyA ? Vector.mult(collisionNormal, -1) : collisionNormal;
-      Body.setVelocity(ball, reflectVelocity(ball.velocity, wallToBallNormal));
-      enforceBallSpeed(ball);
+      redirectBallToCenter(ball);
     }
   });
 });
@@ -575,7 +579,7 @@ Events.on(engine, 'collisionStart', (event) => {
 function syncBallSizeToScoreboardLogo() {
   const style = getComputedStyle(logoA);
   const scoreboardLogoDiameter = parseFloat(style.width) || scoreboardLogoDiameterFallback;
-  ballR = (scoreboardLogoDiameter * 0.75) / 2;
+  ballR = ((scoreboardLogoDiameter * 0.75) / 2) * 2.5;
 }
 
 function refreshBallSizing() {
