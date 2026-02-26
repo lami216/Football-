@@ -35,7 +35,7 @@ const worldSize = 1000;
 const center = { x: worldSize / 2, y: worldSize / 2 };
 const arenaR = 420;
 const scoreboardLogoDiameterFallback = 34;
-let ballR = (scoreboardLogoDiameterFallback * 0.75) / 2;
+let ballR = scoreboardLogoDiameterFallback / 2;
 const baseSpeed = 6.4;
 const segments = 140;
 const gapSize = 0.44;
@@ -579,7 +579,7 @@ Events.on(engine, 'collisionStart', (event) => {
 function syncBallSizeToScoreboardLogo() {
   const style = getComputedStyle(logoA);
   const scoreboardLogoDiameter = parseFloat(style.width) || scoreboardLogoDiameterFallback;
-  ballR = ((scoreboardLogoDiameter * 0.75) / 2) * 2.5;
+  ballR = scoreboardLogoDiameter / 2;
 }
 
 function refreshBallSizing() {
