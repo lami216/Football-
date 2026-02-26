@@ -37,16 +37,16 @@ const arenaR = 420;
 const ballR = 34;
 const segments = 140;
 const goalHalfWidth = 0.22;
-const goalRotationSpeed = 0.00022;
+const goalRotationSpeed = 0.00033;
 const impulseIntervalMin = 1000;
 const impulseIntervalMax = 1500;
 const impulseForceMin = 0.0016;
 const impulseForceMax = 0.0028;
 const lowSpeedThreshold = 3.1;
 const minSpeed = 3.7;
-const maxSpeed = 9.2;
-const wallBoostMin = 1.05;
-const wallBoostMax = 1.15;
+const maxSpeed = 13.8;
+const wallBoostMin = 1 + (1.05 - 1) * 1.5;
+const wallBoostMax = 1 + (1.15 - 1) * 1.5;
 const overlapCheckRadius = ballR * 2.03;
 
 const engine = Engine.create();
@@ -63,8 +63,6 @@ const physics = {
   nextImpulseAt: 0,
   goalAngle: 0,
   lastGoalAngleUpdate: performance.now(),
-  lastBoundaryAngle: 0,
-  boundaryRefreshThreshold: (Math.PI * 2) / segments / 1.5,
   activeResetNonce: null,
   runnerStarted: false
 };
@@ -307,7 +305,7 @@ function kickOff() {
     const a = baseAngle + direction * (Math.PI * 0.1 + Math.random() * Math.PI * 0.1);
     const speed = minSpeed + Math.random() * 0.8;
     Body.setVelocity(ball, { x: Math.cos(a) * speed, y: Math.sin(a) * speed });
-    randomImpulse(ball, 1.2);
+    randomImpulse(ball, 1.8);
   });
 }
 
@@ -479,11 +477,7 @@ function updateGoalRotation() {
   const dt = Math.min(50, now - physics.lastGoalAngleUpdate);
   physics.lastGoalAngleUpdate = now;
   physics.goalAngle = (physics.goalAngle + dt * goalRotationSpeed) % (Math.PI * 2);
-  const angleDelta = Math.abs(Math.atan2(Math.sin(physics.goalAngle - physics.lastBoundaryAngle), Math.cos(physics.goalAngle - physics.lastBoundaryAngle)));
-  if (angleDelta >= physics.boundaryRefreshThreshold) {
-    buildArenaBoundary();
-    physics.lastBoundaryAngle = physics.goalAngle;
-  }
+  buildArenaBoundary();
 }
 
 function drawNet() {
