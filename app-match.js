@@ -34,8 +34,7 @@ const resetMatchBtn = document.getElementById('resetMatchBtn');
 const worldSize = 1000;
 const center = { x: worldSize / 2, y: worldSize / 2 };
 const arenaR = 420;
-const scoreboardLogoDiameterFallback = 34;
-let ballR = scoreboardLogoDiameterFallback / 2;
+let ballR = 0;
 const baseSpeed = 6.4;
 const segments = 140;
 const gapSize = 0.44;
@@ -510,7 +509,7 @@ function drawBall(ball, color, logoImg) {
   ctx.stroke();
 
   if (logoImg && logoImg.complete && logoImg.naturalWidth > 0) {
-    const clipRadius = Math.max(1, ballR - 2);
+    const clipRadius = ballR;
     const imageDiameter = clipRadius * 2;
     const minSide = Math.min(logoImg.naturalWidth, logoImg.naturalHeight);
     const sourceX = (logoImg.naturalWidth - minSide) / 2;
@@ -577,8 +576,8 @@ Events.on(engine, 'collisionStart', (event) => {
 });
 
 function syncBallSizeToScoreboardLogo() {
-  const style = getComputedStyle(logoA);
-  const scoreboardLogoDiameter = parseFloat(style.width) || scoreboardLogoDiameterFallback;
+  const rect = logoA.getBoundingClientRect();
+  const scoreboardLogoDiameter = rect.width;
   ballR = scoreboardLogoDiameter / 2;
 }
 
