@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Physics Football Simulator</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <main class="app">
+    <section class="controls">
+      <label>
+        Team A
+        <input id="teamAInput" type="text" value="Team A" maxlength="20" />
+      </label>
+      <label>
+        Team B
+        <input id="teamBInput" type="text" value="Team B" maxlength="20" />
+      </label>
+      <label>
+        Match duration (15-60 sec)
+        <input id="durationInput" type="number" min="15" max="60" value="30" />
+      </label>
+      <label>
+        Theme
+        <select id="themeSelect">
+          <option value="champions">Champions</option>
+          <option value="laliga">LaLiga</option>
+          <option value="premier">Premier</option>
+        </select>
+      </label>
+      <button id="startBtn" type="button">Start Match</button>
+    </section>
+
+    <section class="scoreboard" aria-live="polite">
+      <span id="teamAName">Team A</span>
+      <span id="teamAScore">0</span>
+      <span id="timer">30</span>
+      <span id="teamBScore">0</span>
+      <span id="teamBName">Team B</span>
+    </section>
+
+    <section class="arena-wrap">
+      <canvas id="arenaCanvas" width="700" height="700"></canvas>
+      <div id="winnerBanner" class="winner hidden"></div>
+    </section>
+  </main>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.20.0/matter.min.js" referrerpolicy="no-referrer"></script>
+  <script src="script.js"></script>
+</body>
+</html>
