@@ -10,10 +10,10 @@ const FIELD = {
 };
 
 const PHYSICS = {
-  tokenMaxSpeed: 210,
-  tokenDrag: 0.9,
+  tokenMaxSpeed: 278,
+  tokenDrag: 0.92,
   tokenBounce: 0.76,
-  ballDrag: 0.988,
+  ballDrag: 0.992,
   ballBounce: 0.9,
   ballGoalBounce: 0.72,
   tackleRange: 34,
@@ -189,13 +189,6 @@ const steer = (token, tx, ty, desiredSpeed, force) => {
   }
 };
 
-const tokenTargetX = (team, hasPossession) => {
-  if (hasPossession) {
-    return team === 'home' ? FIELD.width * 0.84 : FIELD.width * 0.16;
-  }
-  return team === 'home' ? FIELD.width * 0.45 : FIELD.width * 0.55;
-};
-
 const updatePossession = (engine) => {
   const dHome = Math.hypot(engine.home.x - engine.ball.x, engine.home.y - engine.ball.y);
   const dAway = Math.hypot(engine.away.x - engine.ball.x, engine.away.y - engine.ball.y);
@@ -337,6 +330,64 @@ const resolveTokenCollision = ({ engine, minute, homeTeam, awayTeam }) => {
 
 const targetGoalX = (team) => (team === 'home' ? FIELD.width - FIELD.goalDepth : FIELD.goalDepth);
 
+const goalHitboxFor = (team, ballRadius = 0) => {
+  const depth = 24;
+  const leftX = FIELD.margin + ballRadius;
+  const rightX = FIELD.width - FIELD.margin - ballRadius;
+
+  if (team === 'home') {
+    return {
+      minX: rightX - depth,
+      maxX: rightX + 2,
+      minY: FIELD.goalTop + ballRadius * 0.25,
+      maxY: FIELD.goalBottom - ballRadius * 0.25
+    };
+  }
+
+  return {
+    minX: leftX - 2,
+    maxX: leftX + depth,
+    minY: FIELD.goalTop + ballRadius * 0.25,
+    maxY: FIELD.goalBottom - ballRadius * 0.25
+  };
+};
+
+const inPenaltyBand = (x) => x < FIELD.width * 0.22 || x > FIELD.width * 0.78;
+
+const processGoalFromBallPosition = ({ engine, minute, homeTeam, awayTeam }) => {
+  if (engine.phase === 'goal_reset' || engine.phase === 'kickoff') return false;
+
+  const homeGoalBox = goalHitboxFor('home', engine.ball.radius);
+  const awayGoalBox = goalHitboxFor('away', engine.ball.radius);
+  const isHomeGoal = engine.ball.x >= homeGoalBox.minX && engine.ball.x <= homeGoalBox.maxX && engine.ball.y >= homeGoalBox.minY && engine.ball.y <= homeGoalBox.maxY;
+  const isAwayGoal = engine.ball.x >= awayGoalBox.minX && engine.ball.x <= awayGoalBox.maxX && engine.ball.y >= awayGoalBox.minY && engine.ball.y <= awayGoalBox.maxY;
+
+  if (!isHomeGoal && !isAwayGoal) return false;
+
+  const scoringTeam = isHomeGoal ? 'home' : 'away';
+  const concedingTeam = scoringTeam === 'home' ? 'away' : 'home';
+  const shooterObj = teamObjFor(scoringTeam, homeTeam, awayTeam);
+  const assistant = chance(0.36) ? randomPlayerByZone(shooterObj, scoringTeam, engine.ball.x + (scoringTeam === 'home' ? -68 : 68)) : '';
+
+  engine.score[scoringTeam] += 1;
+  pushEvent(engine, createEvent({
+    type: 'goal',
+    team: scoringTeam,
+    minute,
+    player: randomPlayerByZone(shooterObj, scoringTeam, engine.ball.x),
+    secondaryPlayer: assistant,
+    emphasis: true
+  }));
+
+  engine.possession = concedingTeam;
+  engine.phase = 'goal_reset';
+  engine.phaseClock = 0;
+  engine.ball.vx = 0;
+  engine.ball.vy = 0;
+  engine.recentBurst = 1;
+  return true;
+};
+
 const tryCreateAttackEvent = (engine, minute, homeTeam, awayTeam) => {
   const team = engine.possession === 'loose' ? engine.lastTouch : engine.possession;
   if (!team) return;
@@ -376,24 +427,27 @@ const maybeTakeShot = (engine) => {
 
   const token = team === 'home' ? engine.home : engine.away;
   const progress = team === 'home' ? token.x / FIELD.width : (FIELD.width - token.x) / FIELD.width;
-  if (progress < 0.62) return;
+  if (progress < 0.55) return;
 
   const laneCloseness = 1 - Math.abs(token.y - FIELD.height / 2) / (FIELD.height / 2);
   const shotTrigger = clamp(progress * 0.9 + laneCloseness * 0.45 + engine.attackDrive * 0.55, 0, 1);
 
-  if (!chance(shotTrigger * 0.018)) return;
+  const pressureBonus = inPenaltyBand(token.x) ? 0.02 : 0;
+  if (!chance(shotTrigger * 0.028 + pressureBonus)) return;
 
   engine.phase = 'shot_attempt';
   engine.phaseClock = 0;
   engine.shotTeam = team;
 
   const goalX = targetGoalX(team);
-  const shotY = FIELD.height / 2 + (Math.random() - 0.5) * 92;
+  const shotY = FIELD.height / 2 + (Math.random() - 0.5) * (inPenaltyBand(token.x) ? 68 : 88);
   const dir = normalize(goalX - engine.ball.x, shotY - engine.ball.y);
-  const baseShot = 260 + Math.random() * 120 + engine.attackDrive * 55;
+  const baseShot = 318 + Math.random() * 150 + engine.attackDrive * 72;
   engine.ball.vx = dir.x * baseShot;
   engine.ball.vy = dir.y * baseShot;
   engine.recentBurst = 1;
+  engine.lastTouch = team;
+  engine.lastTouchClock = 0;
 };
 
 const settleAfterGoalLike = (engine) => {
@@ -423,7 +477,7 @@ export const createLiveMatchEngine = ({ homeTeam, awayTeam, scriptedEvents = [],
   impacts: [],
   recentBurst: 0,
   shotTeam: null,
-  attackDrive: 0.45,
+  attackDrive: 0.58,
   lastTouch: null,
   lastTouchClock: 0,
   activeScriptedIndex: 0,
@@ -451,7 +505,7 @@ export const stepLiveMatch = ({ engine, dt, minute, homeTeam, awayTeam }) => {
     engine.ball.vx += toCenter.x * 32 * dt;
     engine.ball.vy += toCenter.y * 32 * dt;
 
-    if (engine.phaseClock > 0.75) {
+    if (engine.phaseClock > 0.5) {
       engine.phase = 'neutral_play';
       engine.phaseClock = 0;
     }
@@ -472,34 +526,40 @@ export const stepLiveMatch = ({ engine, dt, minute, homeTeam, awayTeam }) => {
       engine.activeScriptedIndex += 1;
     }
 
-    const homeAggressiveSpeed = homeHas ? 160 : 142;
-    const awayAggressiveSpeed = awayHas ? 160 : 142;
-    const homeTargetX = tokenTargetX('home', homeHas);
-    const awayTargetX = tokenTargetX('away', awayHas);
-
-    const homeTargetY = (homeHas ? engine.ball.y : engine.ball.y + (Math.random() - 0.5) * 26);
-    const awayTargetY = (awayHas ? engine.ball.y : engine.ball.y + (Math.random() - 0.5) * 26);
-
-    steer(engine.home, homeTargetX, homeTargetY, homeAggressiveSpeed, homeHas ? 0.2 : 0.16);
-    steer(engine.away, awayTargetX, awayTargetY, awayAggressiveSpeed, awayHas ? 0.2 : 0.16);
+    const nearPenalty = inPenaltyBand(engine.ball.x);
 
     if (engine.possession === 'loose') {
-      steer(engine.home, engine.ball.x, engine.ball.y, 175, 0.22);
-      steer(engine.away, engine.ball.x, engine.ball.y, 175, 0.22);
+      steer(engine.home, engine.ball.x, engine.ball.y, nearPenalty ? 242 : 228, nearPenalty ? 0.34 : 0.31);
+      steer(engine.away, engine.ball.x, engine.ball.y, nearPenalty ? 242 : 228, nearPenalty ? 0.34 : 0.31);
+    } else {
+      const attackingTeam = engine.possession;
+      const defendingTeam = attackingTeam === 'home' ? 'away' : 'home';
+      const attacker = attackingTeam === 'home' ? engine.home : engine.away;
+      const defender = defendingTeam === 'home' ? engine.home : engine.away;
+      const attackGoalX = attackingTeam === 'home' ? FIELD.width - FIELD.margin - 22 : FIELD.margin + 22;
+
+      const pressureX = attackingTeam === 'home'
+        ? clamp(engine.ball.x - 34, FIELD.margin + 40, FIELD.width - FIELD.margin - 40)
+        : clamp(engine.ball.x + 34, FIELD.margin + 40, FIELD.width - FIELD.margin - 40);
+
+      const angleY = clamp(engine.ball.y + (defender.y > engine.ball.y ? -16 : 16), FIELD.margin + 24, FIELD.height - FIELD.margin - 24);
+
+      steer(attacker, attackGoalX, clamp(engine.ball.y, FIELD.margin + 20, FIELD.height - FIELD.margin - 20), nearPenalty ? 258 : 238, nearPenalty ? 0.34 : 0.3);
+      steer(defender, pressureX, angleY, nearPenalty ? 252 : 232, nearPenalty ? 0.33 : 0.28);
     }
 
     tryCreateAttackEvent(engine, minute, homeTeam, awayTeam);
     maybeTakeShot(engine);
 
-    if (engine.phase === 'tackle_collision' && engine.phaseClock > 0.22) {
+    if (engine.phase === 'tackle_collision' && engine.phaseClock > 0.14) {
       engine.phase = 'neutral_play';
       engine.phaseClock = 0;
     }
 
     if (engine.possession === 'home' || engine.possession === 'away') {
-      engine.attackDrive = clamp(engine.attackDrive + dt * 0.22, 0.15, 1);
+      engine.attackDrive = clamp(engine.attackDrive + dt * 0.38, 0.15, 1);
     } else {
-      engine.attackDrive = clamp(engine.attackDrive - dt * 0.1, 0.15, 1);
+      engine.attackDrive = clamp(engine.attackDrive - dt * 0.06, 0.15, 1);
     }
   }
 
@@ -516,7 +576,7 @@ export const stepLiveMatch = ({ engine, dt, minute, homeTeam, awayTeam }) => {
 
     const defenderDist = Math.hypot(defenderToken.x - engine.ball.x, defenderToken.y - engine.ball.y);
 
-    if (defenderDist < defenderToken.radius + engine.ball.radius + 4 && chance(0.55)) {
+    if (defenderDist < defenderToken.radius + engine.ball.radius + 6 && chance(0.5)) {
       const defendObj = teamObjFor(defendingTeam, homeTeam, awayTeam);
       pushEvent(engine, createEvent({
         type: 'save',
@@ -525,28 +585,13 @@ export const stepLiveMatch = ({ engine, dt, minute, homeTeam, awayTeam }) => {
         player: randomPlayerByZone(defendObj, defendingTeam, defenderToken.x),
         emphasis: true
       }));
-      engine.ball.vx *= -0.56;
-      engine.ball.vy = engine.ball.vy * 0.45 + (Math.random() - 0.5) * 90;
+      engine.ball.vx *= -0.66;
+      engine.ball.vy = engine.ball.vy * 0.5 + (Math.random() - 0.5) * 110;
       addImpact(engine, engine.ball.x, engine.ball.y, 0.85);
       engine.possession = defendingTeam;
       settleAfterGoalLike(engine);
     } else if (reachedGoal && inGoalLane) {
-      const shooterObj = teamObjFor(shootingTeam, homeTeam, awayTeam);
-      const assistant = chance(0.4) ? randomPlayerByZone(shooterObj, shootingTeam, engine.ball.x - (shootingTeam === 'home' ? 70 : -70)) : '';
-      engine.score[shootingTeam] += 1;
-      pushEvent(engine, createEvent({
-        type: 'goal',
-        team: shootingTeam,
-        minute,
-        player: randomPlayerByZone(shooterObj, shootingTeam, engine.ball.x),
-        secondaryPlayer: assistant,
-        emphasis: true
-      }));
-      engine.possession = defendingTeam;
-      engine.phase = 'goal_reset';
-      engine.phaseClock = 0;
-      engine.ball.vx *= -0.15;
-      engine.ball.vy *= 0.25;
+      processGoalFromBallPosition({ engine, minute, homeTeam, awayTeam });
     } else if (reachedGoal && !inGoalLane) {
       const shooterObj = teamObjFor(shootingTeam, homeTeam, awayTeam);
       pushEvent(engine, createEvent({
@@ -562,7 +607,7 @@ export const stepLiveMatch = ({ engine, dt, minute, homeTeam, awayTeam }) => {
       settleAfterGoalLike(engine);
     }
 
-    if (engine.phaseClock > 1.5 && engine.phase === 'shot_attempt') {
+    if (engine.phaseClock > 1.15 && engine.phase === 'shot_attempt') {
       engine.possession = defendingTeam;
       settleAfterGoalLike(engine);
     }
@@ -571,7 +616,7 @@ export const stepLiveMatch = ({ engine, dt, minute, homeTeam, awayTeam }) => {
   if (engine.phase === 'save_reset') {
     steer(engine.home, FIELD.width * 0.35, FIELD.height * 0.5, 110, 0.14);
     steer(engine.away, FIELD.width * 0.65, FIELD.height * 0.5, 110, 0.14);
-    if (engine.phaseClock > 0.75) {
+    if (engine.phaseClock > 0.55) {
       engine.phase = 'neutral_play';
       engine.phaseClock = 0;
     }
@@ -585,7 +630,7 @@ export const stepLiveMatch = ({ engine, dt, minute, homeTeam, awayTeam }) => {
     engine.ball.vx += pullToCenter.x * 55 * dt;
     engine.ball.vy += pullToCenter.y * 55 * dt;
 
-    if (engine.phaseClock > 1.05) {
+    if (engine.phaseClock > 0.8) {
       engine.phase = 'kickoff';
       engine.phaseClock = 0;
     }
@@ -593,14 +638,19 @@ export const stepLiveMatch = ({ engine, dt, minute, homeTeam, awayTeam }) => {
 
   const targetBall = engine.possession === 'home' ? engine.home : engine.possession === 'away' ? engine.away : null;
   if (targetBall && engine.phase !== 'shot_attempt') {
-    const toCarrier = normalize(targetBall.x - engine.ball.x, targetBall.y - engine.ball.y);
-    const gather = 12 + engine.attackDrive * 18;
+    const tetherPoint = {
+      x: targetBall.x + (engine.possession === 'home' ? 12 : -12),
+      y: targetBall.y + 2
+    };
+    const toCarrier = normalize(tetherPoint.x - engine.ball.x, tetherPoint.y - engine.ball.y);
+    const dist = Math.hypot(tetherPoint.x - engine.ball.x, tetherPoint.y - engine.ball.y);
+    const gather = 28 + engine.attackDrive * 36 + clamp(dist * 0.45, 0, 62);
     engine.ball.vx += toCarrier.x * gather * dt;
     engine.ball.vy += toCarrier.y * gather * dt;
   }
 
-  const lungeChanceHome = engine.possession === 'away' ? 0.012 + homeTeam.aggressionRating / 2400 : 0;
-  const lungeChanceAway = engine.possession === 'home' ? 0.012 + awayTeam.aggressionRating / 2400 : 0;
+  const lungeChanceHome = engine.possession === 'away' ? 0.015 + homeTeam.aggressionRating / 2100 : 0;
+  const lungeChanceAway = engine.possession === 'home' ? 0.015 + awayTeam.aggressionRating / 2100 : 0;
   if (chance(lungeChanceHome)) engine.home.recentLunge = 1;
   if (chance(lungeChanceAway)) engine.away.recentLunge = 1;
 
@@ -627,6 +677,8 @@ export const stepLiveMatch = ({ engine, dt, minute, homeTeam, awayTeam }) => {
 
   engine.ball.x += engine.ball.vx * dt;
   engine.ball.y += engine.ball.vy * dt;
+
+  processGoalFromBallPosition({ engine, minute, homeTeam, awayTeam });
 
   const inGoalMouth = engine.ball.y > FIELD.goalTop && engine.ball.y < FIELD.goalBottom;
   const sideBounce = inGoalMouth ? PHYSICS.ballGoalBounce : PHYSICS.ballBounce;
