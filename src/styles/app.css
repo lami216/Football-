@@ -95,16 +95,18 @@ button.secondary { background: #111733; }
 .match-canvas { width: 100%; height: min(68vh, 530px); display: block; }
 .event-popup {
   position: absolute;
-  top: 15px;
+  top: 12px;
   left: 50%;
   transform: translateX(-50%);
   background: rgba(8, 9, 24, .93);
   border: 1px solid;
-  border-radius: 12px;
-  padding: 12px 16px;
+  border-radius: 10px;
+  padding: 8px 12px;
   text-align: center;
-  min-width: 300px;
+  width: min(330px, calc(100% - 40px));
   animation: popupIn .25s ease-out;
+  z-index: 3;
+  pointer-events: none;
 }
 .event-popup.emphasis {
   transform: translateX(-50%) scale(1.03);
@@ -116,7 +118,7 @@ button.secondary { background: #111733; }
   justify-content: center;
   align-items: center;
   color: #dbe2ff;
-  font-size: .88rem;
+  font-size: .8rem;
 }
 
 .final-card-overlay {
