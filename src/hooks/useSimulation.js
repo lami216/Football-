@@ -6,9 +6,12 @@ const emptyVisual = {
   phase: 'kickoff',
   possession: 'home',
   flash: 0,
+  pulse: 0,
+  burst: 0,
   home: { x: 250, y: 265, radius: 23, color: '#fff', accent: '#ccc', vx: 0, vy: 0, side: 'home' },
   away: { x: 650, y: 265, radius: 23, color: '#fff', accent: '#ccc', vx: 0, vy: 0, side: 'away' },
-  ball: { x: 450, y: 265, radius: 6, trail: [] }
+  ball: { x: 450, y: 265, radius: 6, trail: [] },
+  impacts: []
 };
 
 export const useSimulation = ({ mode, scriptedEvents, durationSec, homeTeam, awayTeam, randomSeed = 0 }) => {

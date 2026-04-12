@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef } from 'react';
-import { drawBall, drawField, drawToken } from '../canvas/renderMatch';
+import { drawBall, drawField, drawImpacts, drawToken } from '../canvas/renderMatch';
 
 export default function MatchCanvas({ homeTeam, awayTeam, visualState }) {
   const canvasRef = useRef(null);
@@ -14,10 +14,11 @@ export default function MatchCanvas({ homeTeam, awayTeam, visualState }) {
     const width = canvas.width;
     const height = canvas.height;
 
-    drawField(ctx, width, height, visualState.flash);
+    drawField(ctx, width, height, visualState.flash, visualState.pulse || 0);
     drawToken(ctx, visualState.home, homeImage, visualState.possession === 'home');
     drawToken(ctx, visualState.away, awayImage, visualState.possession === 'away');
-    drawBall(ctx, visualState.ball);
+    drawImpacts(ctx, visualState.impacts || []);
+    drawBall(ctx, visualState.ball, visualState.burst || 0);
   }, [visualState, homeImage, awayImage]);
 
   return <canvas ref={canvasRef} className="match-canvas" width={900} height={530} />;
