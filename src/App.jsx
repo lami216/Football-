@@ -7,7 +7,6 @@ import FinalResultCard from './components/FinalResultCard';
 import { themes, getThemeById } from './data/themes';
 import { teams, getTeamById } from './data/teams';
 import { demoSetups } from './data/demos';
-import { generateAutoEvents } from './lib/eventGenerator';
 import { useSimulation } from './hooks/useSimulation';
 
 const initial = demoSetups.elClasico;
@@ -29,16 +28,15 @@ export default function App() {
   const homeTeam = getTeamById(settings.homeTeamId);
   const awayTeam = getTeamById(settings.awayTeamId === settings.homeTeamId ? 'real-madrid' : settings.awayTeamId);
 
-  const autoEvents = useMemo(
-    () => generateAutoEvents({ homeTeam, awayTeam, durationSec: settings.duration }),
-    [homeTeam, awayTeam, settings.duration, autoSeed]
-  );
+  const sortedScriptedEvents = useMemo(() => [...scriptedEvents].sort((a, b) => a.minute - b.minute), [scriptedEvents]);
 
   const simulation = useSimulation({
     mode: settings.mode,
-    scriptedEvents: [...scriptedEvents].sort((a, b) => a.minute - b.minute),
-    autoEvents,
-    durationSec: settings.duration
+    scriptedEvents: sortedScriptedEvents,
+    durationSec: settings.duration,
+    homeTeam,
+    awayTeam,
+    randomSeed: autoSeed
   });
 
   const handleStart = () => simulation.start();
@@ -88,6 +86,7 @@ export default function App() {
             homeTeam={homeTeam}
             awayTeam={awayTeam}
             activeEvent={simulation.activeEvent}
+            visualState={simulation.visualState}
             isRunning={simulation.isRunning}
             finished={simulation.isFinished}
           />

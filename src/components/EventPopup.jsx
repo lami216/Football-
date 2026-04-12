@@ -11,13 +11,14 @@ const eventStyles = {
 export default function EventPopup({ event }) {
   if (!event) return null;
   const style = eventStyles[event.type] || eventStyles.dangerous_attack;
+
   return (
-    <div className="event-popup" style={{ borderColor: style.color, boxShadow: `0 0 25px ${style.color}55` }}>
+    <div className={`event-popup ${event.emphasis ? 'emphasis' : ''}`} style={{ borderColor: style.color, boxShadow: `0 0 28px ${style.color}66` }}>
       <strong style={{ color: style.color }}>{style.title}</strong>
-      <div>
-        {event.player || (event.team === 'home' ? 'Home Team' : 'Away Team')}
-        {event.secondaryPlayer ? ` • ${event.secondaryPlayer}` : ''}
-        {' '} {event.minute}’
+      <div className="event-meta">
+        <span>{event.player || (event.team === 'home' ? 'Home Team' : 'Away Team')}</span>
+        {event.secondaryPlayer ? <span>Assist: {event.secondaryPlayer}</span> : null}
+        <span>{event.minute}’</span>
       </div>
     </div>
   );

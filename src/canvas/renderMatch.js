@@ -1,4 +1,4 @@
-export const drawField = (ctx, width, height) => {
+export const drawField = (ctx, width, height, flash = 0) => {
   ctx.clearRect(0, 0, width, height);
 
   const grass = ctx.createLinearGradient(0, 0, 0, height);
@@ -7,10 +7,24 @@ export const drawField = (ctx, width, height) => {
   ctx.fillStyle = grass;
   ctx.fillRect(0, 0, width, height);
 
+  if (flash > 0) {
+    ctx.fillStyle = `rgba(255,255,255,${flash * 0.12})`;
+    ctx.fillRect(0, 0, width, height);
+  }
+
   ctx.strokeStyle = 'rgba(255,255,255,0.65)';
   ctx.lineWidth = 2;
   ctx.strokeRect(20, 20, width - 40, height - 40);
 
+  for (let i = 1; i < 8; i += 1) {
+    ctx.strokeStyle = i % 2 ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.08)';
+    ctx.beginPath();
+    ctx.moveTo(20, 20 + ((height - 40) / 8) * i);
+    ctx.lineTo(width - 20, 20 + ((height - 40) / 8) * i);
+    ctx.stroke();
+  }
+
+  ctx.strokeStyle = 'rgba(255,255,255,0.65)';
   ctx.beginPath();
   ctx.moveTo(width / 2, 20);
   ctx.lineTo(width / 2, height - 20);
@@ -28,11 +42,11 @@ export const drawField = (ctx, width, height) => {
   ctx.strokeRect(width - 20, height / 2 - 55, 12, 110);
 };
 
-export const drawToken = (ctx, token, logoImage, isBurst) => {
-  if (isBurst) {
+export const drawToken = (ctx, token, logoImage, hasPossession) => {
+  if (hasPossession) {
     ctx.fillStyle = `${token.color}66`;
     ctx.beginPath();
-    ctx.arc(token.x - token.vx * 3, token.y - token.vy * 3, token.radius + 8, 0, Math.PI * 2);
+    ctx.arc(token.x, token.y, token.radius + 9, 0, Math.PI * 2);
     ctx.fill();
   }
 
@@ -53,4 +67,27 @@ export const drawToken = (ctx, token, logoImage, isBurst) => {
     ctx.drawImage(logoImage, token.x - token.radius + 3, token.y - token.radius + 3, (token.radius - 3) * 2, (token.radius - 3) * 2);
     ctx.restore();
   }
+};
+
+export const drawBall = (ctx, ball) => {
+  ball.trail?.forEach((point, index) => {
+    ctx.fillStyle = `rgba(255,255,255,${0.16 + point.life * 0.22})`;
+    ctx.beginPath();
+    ctx.arc(point.x, point.y, Math.max(1.5, 4 - index * 0.35), 0, Math.PI * 2);
+    ctx.fill();
+  });
+
+  ctx.fillStyle = '#f8f8ff';
+  ctx.beginPath();
+  ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.strokeStyle = '#101010';
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  ctx.fillStyle = 'rgba(0,0,0,0.35)';
+  ctx.beginPath();
+  ctx.arc(ball.x + 1, ball.y - 1, ball.radius * 0.45, 0, Math.PI * 2);
+  ctx.fill();
 };
